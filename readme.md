@@ -1,4 +1,4 @@
 # testorepo
-Rusttris - le sux alert
+Rusttris - next generation tetris
 
-![ost](https://github.com/kaffelars/testorepo/resources/rusttris.png)
+![ost](testorepo/resources/rusttris.png)
