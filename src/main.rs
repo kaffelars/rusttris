@@ -15,7 +15,6 @@ struct State {
 
 struct tile {
     blocks : Vec<(i32,i32)>,
-    bounds : (i32, i32), //x- og x+
     color: i32,
 }
 
@@ -54,7 +53,7 @@ impl gameboard {
 
         for x in 0..NUMBEROFTILES {
             if x > NUMBEROFTILES - 91 {
-                board.push(thread_rng().gen_range(0.0, 8.0) as i32);
+                board.push(thread_rng().gen_range(0.0, 10.99) as i32);
             } else {
                 board.push(0);
             }
@@ -64,33 +63,36 @@ impl gameboard {
         let mut tiles = Vec::new();
 
         let blocks = vec![(0,0),(-1,0),(0,-1),(0,1)];
-        let tilo = tile{blocks:blocks, bounds:(1,0), color:1};
+        let tilo = tile{blocks:blocks, color:1};
         tiles.push(tilo);
 
         let blocks = vec![(0,0),(1,0),(1,1),(0,1)];
-        let tilo = tile{blocks:blocks, bounds:(0,1), color:2};
+        let tilo = tile{blocks:blocks, color:2};
         tiles.push(tilo);
 
         let blocks = vec![(0,0),(1,1),(0,1),(0,-1)];
-        let tilo = tile{blocks:blocks, bounds:(0,1), color:3};
+        let tilo = tile{blocks:blocks, color:3};
         tiles.push(tilo);
 
         let blocks = vec![(0,0),(-1,1),(0,1),(0,-1)];
-        let tilo = tile{blocks:blocks, bounds:(1,0), color:4};
+        let tilo = tile{blocks:blocks, color:4};
         tiles.push(tilo);
 
         let blocks = vec![(0,0),(0,1),(0,-1),(0,2)];
-        let tilo = tile{blocks:blocks, bounds:(0,0), color:5};
+        let tilo = tile{blocks:blocks, color:5};
         tiles.push(tilo);
 
         let blocks = vec![(0,0),(0,1),(1,1),(-1,0)];
-        let tilo = tile{blocks:blocks, bounds:(1,1), color:6};
+        let tilo = tile{blocks:blocks, color:6};
         tiles.push(tilo);
 
         let blocks = vec![(0,0),(0,1),(-1,1),(1,0)];
-        let tilo = tile{blocks:blocks, bounds:(1,1), color:7};
+        let tilo = tile{blocks:blocks, color:7};
         tiles.push(tilo);
 
+        let blocks = vec![(0,0),(0,1),(0,-1),(1,0),(-1,0),(0,2),(0,-2),(2,0),(-2,0)];
+        let tilo = tile{blocks:blocks, color:8};
+        tiles.push(tilo);
         gameboard {board: board, tiles: tiles, activetile: brick{active: false, tileid: 0, flipped: 0, blocks: Vec::new(), bounds:(0,0), x: 0, y: 0}, lastupdate : Instant::now()}
     }
 
@@ -172,8 +174,8 @@ impl gameboard {
                 _ => {},
             }
 
-            if gg.0 == -1 {self.activetile.bounds.0 = 1}
-            if gg.0 == 1 {self.activetile.bounds.1 = 1}
+            if gg.0 < self.activetile.bounds.0 {self.activetile.bounds.0 = gg.0}
+            if gg.0 > self.activetile.bounds.1 {self.activetile.bounds.1 = gg.0}
             self.activetile.blocks.push(gg);
         }
     }
