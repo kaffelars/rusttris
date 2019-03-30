@@ -5,3 +5,6 @@ authors = ["kaffelars <mortjd@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+ggez = "0.5.0-rc.1"
+cgmath = "0.17.0"
+rand = "0.4.2"
