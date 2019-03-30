@@ -1,4 +1,4 @@
 # testorepo
 Rusttris - next generation tetris
 
-![ost](testorepo/resources/rusttris.png)
+![ost](https://github.com/kaffelars/testorepo/blob/master/resources/rusttris.png?raw=true)
