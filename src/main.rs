@@ -1,6 +1,8 @@
 use ggez::*;
+use ggez::event::{KeyCode, KeyMods};
 extern crate rand;
 use rand::{thread_rng, Rng};
+use std::time::{Duration, Instant};
 
 const BOARDSIZE: (i32, i32) = (20, 35);
 const TILESIZE: i32 = 24;
@@ -13,6 +15,7 @@ struct State {
 
 struct tile {
     blocks : Vec<(i32,i32)>,
+    bounds : (i32, i32), //x- og x+
     color: i32,
 }
 
@@ -20,6 +23,7 @@ struct gameboard {
     board: Vec<i32>,
     tiles: Vec<tile>,
     activetile: brick,//Option<brick>,
+    lastupdate : Instant,
 }
 
 struct block {
@@ -31,6 +35,9 @@ struct block {
 struct brick {
     active : bool,
     tileid : i32,
+    flipped : i32,
+    blocks : Vec<(i32,i32)>,//lazy times
+    bounds : (i32, i32),
     x:i32,
     y:i32,
 }
@@ -57,34 +64,34 @@ impl gameboard {
         let mut tiles = Vec::new();
 
         let blocks = vec![(0,0),(-1,0),(0,-1),(0,1)];
-        let tilo = tile{blocks:blocks, color:1};
+        let tilo = tile{blocks:blocks, bounds:(1,0), color:1};
         tiles.push(tilo);
 
         let blocks = vec![(0,0),(1,0),(1,1),(0,1)];
-        let tilo = tile{blocks:blocks, color:2};
+        let tilo = tile{blocks:blocks, bounds:(0,1), color:2};
         tiles.push(tilo);
 
         let blocks = vec![(0,0),(1,1),(0,1),(0,-1)];
-        let tilo = tile{blocks:blocks, color:3};
+        let tilo = tile{blocks:blocks, bounds:(0,1), color:3};
         tiles.push(tilo);
 
         let blocks = vec![(0,0),(-1,1),(0,1),(0,-1)];
-        let tilo = tile{blocks:blocks, color:4};
+        let tilo = tile{blocks:blocks, bounds:(1,0), color:4};
         tiles.push(tilo);
 
         let blocks = vec![(0,0),(0,1),(0,-1),(0,2)];
-        let tilo = tile{blocks:blocks, color:5};
+        let tilo = tile{blocks:blocks, bounds:(0,0), color:5};
         tiles.push(tilo);
 
         let blocks = vec![(0,0),(0,1),(1,1),(-1,0)];
-        let tilo = tile{blocks:blocks, color:6};
+        let tilo = tile{blocks:blocks, bounds:(1,1), color:6};
         tiles.push(tilo);
 
         let blocks = vec![(0,0),(0,1),(-1,1),(1,0)];
-        let tilo = tile{blocks:blocks, color:7};
+        let tilo = tile{blocks:blocks, bounds:(1,1), color:7};
         tiles.push(tilo);
 
-        gameboard {board: board, tiles: tiles, activetile: brick{active: false, tileid: 0, x: 0, y: 0}}
+        gameboard {board: board, tiles: tiles, activetile: brick{active: false, tileid: 0, flipped: 0, blocks: Vec::new(), bounds:(0,0), x: 0, y: 0}, lastupdate : Instant::now()}
     }
 
     fn get1dcoords(xy:(i32, i32)) -> i32 {
@@ -115,33 +122,97 @@ impl gameboard {
         self.board[gameboard::get1dcoords(xy) as usize] = tileid;
     }*/
 
-    fn updateboard(&mut self) {
-        if self.activetile.active {
-            self.activetile.y += 1;
-            //sjekk om kræsj
+    fn movebrick(&mut self, x:i32) {
+        self.activetile.x += x;
 
-            let mut krasj = false;
+        if self.activetile.x < self.activetile.bounds.0 {
+            self.activetile.x = self.activetile.bounds.0;
+        }
 
-            for bb in &self.tiles[self.activetile.tileid as usize].blocks {
-                if self.gettileid((self.activetile.x+bb.0, self.activetile.y+bb.1)) > 0 {
-                    //kræsj
-                    krasj = true;
-                }
+        if self.activetile.x > BOARDSIZE.0-self.activetile.bounds.1-1 {
+            self.activetile.x = BOARDSIZE.0-self.activetile.bounds.1-1;
+        }
+    }
+
+    fn flipbrick(&mut self) {
+        let pepsimaxi = self.activetile.flipped;
+        self.activetile.flipped += 1; //sjekk om det er lov å flippe
+        if self.activetile.flipped > 3 {self.activetile.flipped = 0}
+
+        self.fillactivetile();
+
+        if self.iscrash() { //ikke lov å flippe dersom det blir kræsj
+            self.activetile.flipped = pepsimaxi;
+            self.fillactivetile();
+        }
+    }
+
+    fn iscrash(&mut self) -> bool {
+        for bb in &self.activetile.blocks {
+            if self.gettileid((self.activetile.x+bb.0, self.activetile.y+bb.1)) > 0 {
+                //kræsj
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    fn fillactivetile(&mut self) {
+        self.activetile.blocks.clear();
+        self.activetile.bounds = (0,0);
+
+        for bb in &self.tiles[self.activetile.tileid as usize].blocks {
+            let mut gg = *bb;
+
+            match self.activetile.flipped {
+                1 => {gg = (-gg.1, gg.0)},
+                2 => {gg = (-gg.0, -gg.1)}, //rett
+                3 => {gg = (gg.1, -gg.0)},
+                _ => {},
             }
 
-            if krasj == true {
-                self.activetile.y -= 1;
-                for bb in &self.tiles[self.activetile.tileid as usize].blocks {
-                    self.board[gameboard::get1dcoords((self.activetile.x+bb.0, self.activetile.y+bb.1)) as usize] = self.tiles[self.activetile.tileid as usize].color;
-                }
-                self.activetile.active = false;
-            }
+            if gg.0 == -1 {self.activetile.bounds.0 = 1}
+            if gg.0 == 1 {self.activetile.bounds.1 = 1}
+            self.activetile.blocks.push(gg);
+        }
+    }
 
-        } else {
-            self.activetile.active = true;
-            self.activetile.x = thread_rng().gen_range(2.0, (BOARDSIZE.0 as f32)-2.0) as i32;//BOARDSIZE.0 / 2;
-            self.activetile.y = 1;
-            self.activetile.tileid = thread_rng().gen_range(0.0, 7.0) as i32;
+    fn newactivetile(&mut self, tileid:i32) {
+        
+        self.activetile.flipped = thread_rng().gen_range(0.0, 3.0) as i32;;
+        self.activetile.tileid = tileid;
+        self.activetile.bounds = (0,0);
+
+        self.fillactivetile();
+
+        self.activetile.y = 2;
+        self.activetile.active = true;
+        self.activetile.x = thread_rng().gen_range(2.0, (BOARDSIZE.0 as f32)-2.0) as i32;//BOARDSIZE.0 / 2;
+        
+    }
+
+    fn updateboard(&mut self, updatenow : bool) {
+        if updatenow == true || Instant::now() - self.lastupdate >= Duration::from_millis(152) {
+            
+            if self.activetile.active {
+                self.activetile.y += 1;
+                //sjekk om kræsj
+
+                let krasj = self.iscrash();
+
+                if krasj == true {
+                    self.activetile.y -= 1;
+                    for bb in &self.activetile.blocks {
+                        self.board[gameboard::get1dcoords((self.activetile.x+bb.0, self.activetile.y+bb.1)) as usize] = self.tiles[self.activetile.tileid as usize].color;
+                    }
+                    self.activetile.active = false;
+                }
+
+            } else {
+                self.newactivetile(thread_rng().gen_range(0.0, 7.0) as i32);
+            }
+            self.lastupdate = Instant::now();
         }
     }
 
@@ -168,7 +239,7 @@ impl gameboard {
         //hvis activetile
         if self.activetile.active {
             let color = self.tiles[self.activetile.tileid as usize].color;
-            for bb in &self.tiles[self.activetile.tileid as usize].blocks {
+            for bb in &self.activetile.blocks {
                 blockstorender.push(block{x:self.activetile.x+bb.0, y:self.activetile.y+bb.1, color:color});
             }
         }
@@ -180,7 +251,7 @@ impl gameboard {
 
 impl ggez::event::EventHandler for State {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
-        self.gboard.updateboard();
+        self.gboard.updateboard(false);
         Ok(())
     }
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
@@ -207,6 +278,16 @@ impl ggez::event::EventHandler for State {
 
         graphics::present(ctx)?;
         Ok(())
+    }
+
+    fn key_down_event(&mut self,ctx: &mut Context, keycode: KeyCode, _keymod: KeyMods, _repeat: bool) {
+        match keycode {
+            KeyCode::Up => {self.gboard.flipbrick()},
+            KeyCode::Down => {self.gboard.updateboard(true)},
+            KeyCode::Left => {self.gboard.movebrick(-1)},
+            KeyCode::Right => self.gboard.movebrick(1),
+            _ => {},
+        }
     }
 }
 
