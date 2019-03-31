@@ -1,5 +1,6 @@
 use ggez::*;
 use ggez::event::{KeyCode, KeyMods};
+use ggez::graphics::{self, DrawMode, MeshBuilder};
 extern crate rand;
 use rand::{thread_rng, Rng};
 use std::time::{Duration, Instant};
@@ -98,10 +99,8 @@ impl gameboard {
         let tilo = tile{blocks:blocks, color:7};
         tiles.push(tilo);
 
-        /*let blocks = vec![(0,0),(0,1),(0,-1),(1,0),(-1,0),(0,2),(0,-2),(2,0),(-2,0),(-2,-1),(-2,-2),(2,1),(2,2),(-1,2),(-2,2),(1,-2),(2,-2)];
-        let tilo = tile{blocks:blocks, color:8};
-        tiles.push(tilo);*/
-        gameboard {board: board, tiles: tiles, activetile: brick{active: false, tileid: 0, flipped: 0, blocks: Vec::new(), bounds:(0,0), x: 0, y: 0}, lastupdate : Instant::now(), gamespeed: 120, gameover: false}
+        gameboard {board: board, tiles: tiles, activetile: brick{active: false, tileid: 0, flipped: 0, 
+            blocks: Vec::new(), bounds:(0,0), x: 0, y: 0}, lastupdate : Instant::now(), gamespeed: 120, gameover: false}
     }
 
     fn get1dcoords(xy:(i32, i32)) -> i32 {
@@ -344,12 +343,17 @@ impl ggez::event::EventHandler for State {
 
         let torender = self.gboard.renderboard();
 
-        for blok in &torender {
-            let pep = graphics::Mesh::new_rectangle(ctx, graphics::DrawMode::fill(), 
-                    ggez::graphics::Rect::new_i32(blok.x*TILESIZE+1, blok.y*TILESIZE+1, TILESIZE-2, TILESIZE-2), 
-                    gameboard::getcolor(blok.color)).unwrap();
+        if torender.is_empty() == false {
+            let mut meshbuilder = MeshBuilder::new();
 
-            graphics::draw(ctx, &pep, graphics::DrawParam::default()).unwrap();
+            for blok in &torender {
+                let mut meshbuilder = meshbuilder.rectangle(graphics::DrawMode::fill(), 
+                ggez::graphics::Rect::new_i32(blok.x*TILESIZE+1, blok.y*TILESIZE+1, TILESIZE-2, TILESIZE-2),gameboard::getcolor(blok.color));
+            }
+
+            let meshtodraw = meshbuilder.build(ctx)?;
+
+            graphics::draw(ctx, &meshtodraw, (mint::Point2{x:0.0, y:0.0}, 0.0, graphics::WHITE))?;
         }
 
         if self.gboard.gameover {
