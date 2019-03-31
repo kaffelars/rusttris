@@ -3,14 +3,18 @@ use ggez::event::{KeyCode, KeyMods};
 extern crate rand;
 use rand::{thread_rng, Rng};
 use std::time::{Duration, Instant};
+extern crate cgmath;
+extern crate mint;
 
-const BOARDSIZE: (i32, i32) = (20, 35);
-const TILESIZE: i32 = 24;
+const BOARDSIZE: (i32, i32) = (12, 22);
+const TILESIZE: i32 = 36;
 const NUMBEROFTILES: i32 = BOARDSIZE.1 * BOARDSIZE.0;
 
 
 struct State {
     gboard: gameboard,
+    score:i32,
+    font: graphics::Font,
 }
 
 struct tile {
@@ -23,6 +27,8 @@ struct gameboard {
     tiles: Vec<tile>,
     activetile: brick,//Option<brick>,
     lastupdate : Instant,
+    gamespeed:u64,
+    gameover:bool,
 }
 
 struct block {
@@ -52,11 +58,13 @@ impl gameboard {
         let mut board = Vec::new();
 
         for x in 0..NUMBEROFTILES {
-            if x > NUMBEROFTILES - 91 {
-                board.push(thread_rng().gen_range(0.0, 10.99) as i32);
+            board.push(0);
+
+            /*if x > NUMBEROFTILES - 91 {
+                board.push(thread_rng().gen_range(0.0, 8.0) as i32);
             } else {
                 board.push(0);
-            }
+            }*/
         }
 
         //lage tiles
@@ -90,10 +98,10 @@ impl gameboard {
         let tilo = tile{blocks:blocks, color:7};
         tiles.push(tilo);
 
-        let blocks = vec![(0,0),(0,1),(0,-1),(1,0),(-1,0),(0,2),(0,-2),(2,0),(-2,0)];
+        /*let blocks = vec![(0,0),(0,1),(0,-1),(1,0),(-1,0),(0,2),(0,-2),(2,0),(-2,0),(-2,-1),(-2,-2),(2,1),(2,2),(-1,2),(-2,2),(1,-2),(2,-2)];
         let tilo = tile{blocks:blocks, color:8};
-        tiles.push(tilo);
-        gameboard {board: board, tiles: tiles, activetile: brick{active: false, tileid: 0, flipped: 0, blocks: Vec::new(), bounds:(0,0), x: 0, y: 0}, lastupdate : Instant::now()}
+        tiles.push(tilo);*/
+        gameboard {board: board, tiles: tiles, activetile: brick{active: false, tileid: 0, flipped: 0, blocks: Vec::new(), bounds:(0,0), x: 0, y: 0}, lastupdate : Instant::now(), gamespeed: 120, gameover: false}
     }
 
     fn get1dcoords(xy:(i32, i32)) -> i32 {
@@ -117,15 +125,19 @@ impl gameboard {
     }
 
     fn gettileid(&self, xy:(i32, i32)) -> i32 {
-        self.board[gameboard::get1dcoords(xy) as usize]
+        if xy.0 < 0 || xy.0 >= BOARDSIZE.0 || xy.1 < 0 || xy.1 >= BOARDSIZE.1 {
+            1 //out of bounds
+        } else {
+            self.board[gameboard::get1dcoords(xy) as usize]
+        }
     }
-
-    /*fn settileid(&mut self, xy:(i32, i32), tileid:i32) {
-        self.board[gameboard::get1dcoords(xy) as usize] = tileid;
-    }*/
 
     fn movebrick(&mut self, x:i32) {
         self.activetile.x += x;
+
+        if self.iscrash() {
+            self.activetile.x -= x;
+        }
 
         if self.activetile.x < self.activetile.bounds.0 {
             self.activetile.x = self.activetile.bounds.0;
@@ -134,6 +146,8 @@ impl gameboard {
         if self.activetile.x > BOARDSIZE.0-self.activetile.bounds.1-1 {
             self.activetile.x = BOARDSIZE.0-self.activetile.bounds.1-1;
         }
+
+        
     }
 
     fn flipbrick(&mut self) {
@@ -174,10 +188,14 @@ impl gameboard {
                 _ => {},
             }
 
-            if gg.0 < self.activetile.bounds.0 {self.activetile.bounds.0 = gg.0}
+            if -gg.0 > self.activetile.bounds.0 {self.activetile.bounds.0 = -gg.0}
             if gg.0 > self.activetile.bounds.1 {self.activetile.bounds.1 = gg.0}
             self.activetile.blocks.push(gg);
         }
+    }
+
+    fn gameover(&mut self) {
+        self.gameover = true;
     }
 
     fn newactivetile(&mut self, tileid:i32) {
@@ -191,11 +209,42 @@ impl gameboard {
         self.activetile.y = 2;
         self.activetile.active = true;
         self.activetile.x = thread_rng().gen_range(2.0, (BOARDSIZE.0 as f32)-2.0) as i32;//BOARDSIZE.0 / 2;
+
+        if self.iscrash() {
+            self.gameover();
+        }
         
     }
 
-    fn updateboard(&mut self, updatenow : bool) {
-        if updatenow == true || Instant::now() - self.lastupdate >= Duration::from_millis(152) {
+    fn removerows(&mut self) -> i32 {
+        let mut removedrows = 0;
+
+        for y in 0..BOARDSIZE.1 { //sløs
+            let mut hole = 0;
+            for x in 0..BOARDSIZE.0 {
+                if self.board[gameboard::get1dcoords((x, y)) as usize] == 0 {
+                    hole = 1;
+                }
+            }
+            if hole == 0 {
+                removedrows += 1;
+                for yy in (1..y+1).rev() {
+                    for xx in 0..BOARDSIZE.0 {
+                        self.board[gameboard::get1dcoords((xx, yy)) as usize] = self.board[gameboard::get1dcoords((xx, yy-1)) as usize];
+                    }
+                }
+
+                for xx in 0..BOARDSIZE.0 {
+                    self.board[gameboard::get1dcoords((xx, 0)) as usize] = 0;
+                }
+            }
+        }
+
+        removedrows
+    }
+
+    fn updateboard(&mut self, updatenow : bool, score: &mut i32) {
+        if self.gameover == false && (updatenow == true || Instant::now() - self.lastupdate >= Duration::from_millis(self.gamespeed)) {
             
             if self.activetile.active {
                 self.activetile.y += 1;
@@ -209,7 +258,22 @@ impl gameboard {
                         self.board[gameboard::get1dcoords((self.activetile.x+bb.0, self.activetile.y+bb.1)) as usize] = self.tiles[self.activetile.tileid as usize].color;
                     }
                     self.activetile.active = false;
+
+                    *score+=1;
+
+                    let removedrows = self.removerows();
+
+                    if removedrows > 0 {
+                        *score += match removedrows {
+                            1 => 10,
+                            2 => 25,
+                            3 => 40,
+                            4 => 75,
+                            _ => 3,
+                        }
+                    }
                 }
+
 
             } else {
                 self.newactivetile(thread_rng().gen_range(0.0, 7.0) as i32);
@@ -222,7 +286,7 @@ impl gameboard {
         let mut ex = 0;
         let mut ey = 0;
 
-        //bruk meshbuilder
+        //bruk meshbuilder - og ikke oppdater alt for hver frame ffs
 
         let mut blockstorender = Vec::new();
 
@@ -253,20 +317,30 @@ impl gameboard {
 
 impl ggez::event::EventHandler for State {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
-        self.gboard.updateboard(false);
+        self.gboard.updateboard(false, &mut self.score);
         Ok(())
     }
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         
         graphics::clear(ctx, [0.0, 0.0, 0.0, 1.0].into());
 
-        //ramme
+        //ui
         let pep = graphics::Mesh::new_rectangle(ctx, graphics::DrawMode::stroke(1.0), 
                 ggez::graphics::Rect::new_i32(0, 0, BOARDSIZE.0 * TILESIZE +1, BOARDSIZE.1 * TILESIZE+1), 
                 gameboard::getcolor(1)).unwrap();
         
         graphics::draw(ctx, &pep, graphics::DrawParam::default()).unwrap();
+
+        let pep = graphics::Mesh::new_rectangle(ctx, graphics::DrawMode::stroke(1.0), 
+                ggez::graphics::Rect::new_i32(BOARDSIZE.0 * TILESIZE +25, 25, 100,100), 
+                gameboard::getcolor(1)).unwrap();
+        
+        graphics::draw(ctx, &pep, graphics::DrawParam::default()).unwrap();
         //
+        let score = format!("Score: {}", self.score);
+        let scorep = graphics::Text::new((score, self.font, 32.0));
+        graphics::draw(ctx, &scorep, (mint::Point2{x:(BOARDSIZE.0 * TILESIZE +25) as f32, y:160.0 as f32}, 0.0, makecolor(0.7,0.7, 1.0)));
+
 
         let torender = self.gboard.renderboard();
 
@@ -278,6 +352,12 @@ impl ggez::event::EventHandler for State {
             graphics::draw(ctx, &pep, graphics::DrawParam::default()).unwrap();
         }
 
+        if self.gboard.gameover {
+            let score = format!("GG no re! Final score: {}", self.score);
+            let scorep = graphics::Text::new((score, self.font, 64.0));
+            graphics::draw(ctx, &scorep, (mint::Point2{x:25.0 as f32, y:230.0 as f32}, 0.0, makecolor(1.0,0.8, 0.6)));
+        }
+
         graphics::present(ctx)?;
         Ok(())
     }
@@ -285,7 +365,7 @@ impl ggez::event::EventHandler for State {
     fn key_down_event(&mut self,ctx: &mut Context, keycode: KeyCode, _keymod: KeyMods, _repeat: bool) {
         match keycode {
             KeyCode::Up => {self.gboard.flipbrick()},
-            KeyCode::Down => {self.gboard.updateboard(true)},
+            KeyCode::Down => {self.gboard.updateboard(true, &mut self.score)},
             KeyCode::Left => {self.gboard.movebrick(-1)},
             KeyCode::Right => self.gboard.movebrick(1),
             _ => {},
@@ -309,7 +389,9 @@ fn main() {
 
     let gboard = gameboard::create();
 
-    let state = &mut State {gboard: gboard};
+    let font = graphics::Font::new(ctx, "/DejaVuSerif.ttf").unwrap();
+
+    let state = &mut State {gboard: gboard, score: 0, font:font};
 
     event::run(ctx, event_loop, state).unwrap();
 }
